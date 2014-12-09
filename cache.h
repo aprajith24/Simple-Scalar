@@ -112,10 +112,10 @@ enum cache_policy {
 /* cache block (or line) definition */
 struct cache_blk_t
 {
-  void *way_next;	/* next block in the ordered way chain, used
+  struct cache_blk_t *way_next;	/* next block in the ordered way chain, used
 				   to order blocks for replacement */
-  void *way_prev;	/* previous block in the order way chain */
-  void *hash_next;/* next block in the hash bucket chain, only
+  struct cache_blk_t *way_prev;	/* previous block in the order way chain */
+  struct cache_blk_t *hash_next;/* next block in the hash bucket chain, only
 				   used in highly-associative caches */
   /* since hash table lists are typically small, there is no previous
      pointer, deletion requires a trip through the hash table bucket list */
@@ -134,172 +134,25 @@ struct cache_blk_t
 				   should probably be a multiple of 8 */
 };
 
-struct cache_blk_t_2
-{
-  void *way_next; /* next block in the ordered way chain, used
-           to order blocks for replacement */
-  void *way_prev; /* previous block in the order way chain */
-  void *hash_next;/* next block in the hash bucket chain, only
-           used in highly-associative caches */
-  /* since hash table lists are typically small, there is no previous
-     pointer, deletion requires a trip through the hash table bucket list */
-  md_addr_t tag;    /* data block tag value */
-  md_addr_t start_addr;   /*data block start address*/
-  md_addr_t end_addr;     /*data block end address*/
-  unsigned int status;    /* block status, see CACHE_BLK_* defs above */
-  tick_t ready;   /* time when block will be accessible, field
-           is set when a miss fetch is initiated */
-  byte_t *user_data;    /* pointer to user defined data, e.g.,
-           pre-decode data or physical page address */
-  /* DATA should be pointer-aligned due to preceeding field */
-  /* NOTE: this is a variable-size tail array, this must be the LAST field
-     defined in this structure! */
-  byte_t data[16];   /* actual data block starts here, block size
-           should probably be a multiple of 8 */
+
+struct predictor_parameters
+{md_addr_t address;   /*address of block accessed*/
+ int last_hit[8];    /*history of access per 8 bytes of data*/
+ };
+
+struct prediction_table
+{struct predictor_parameters predictor[65535];
 };
 
-struct cache_blk_t_3
-{
-  void *way_next; /* next block in the ordered way chain, used
-           to order blocks for replacement */
-  void *way_prev; /* previous block in the order way chain */
-  void *hash_next;/* next block in the hash bucket chain, only
-           used in highly-associative caches */
-  /* since hash table lists are typically small, there is no previous
-     pointer, deletion requires a trip through the hash table bucket list */
-  md_addr_t tag;    /* data block tag value */
-  md_addr_t start_addr;   /*data block start address*/
-  md_addr_t end_addr;     /*data block end address*/
-  unsigned int status;    /* block status, see CACHE_BLK_* defs above */
-  tick_t ready;   /* time when block will be accessible, field
-           is set when a miss fetch is initiated */
-  byte_t *user_data;    /* pointer to user defined data, e.g.,
-           pre-decode data or physical page address */
-  /* DATA should be pointer-aligned due to preceeding field */
-  /* NOTE: this is a variable-size tail array, this must be the LAST field
-     defined in this structure! */
-  byte_t data[24];   /* actual data block starts here, block size
-           should probably be a multiple of 8 */
-};
 
-struct cache_blk_t_4
-{
-  void *way_next; /* next block in the ordered way chain, used
-           to order blocks for replacement */
-  void *way_prev; /* previous block in the order way chain */
-  void *hash_next;/* next block in the hash bucket chain, only
-           used in highly-associative caches */
-  /* since hash table lists are typically small, there is no previous
-     pointer, deletion requires a trip through the hash table bucket list */
-  md_addr_t tag;    /* data block tag value */
-  md_addr_t start_addr;   /*data block start address*/
-  md_addr_t end_addr;     /*data block end address*/
-  unsigned int status;    /* block status, see CACHE_BLK_* defs above */
-  tick_t ready;   /* time when block will be accessible, field
-           is set when a miss fetch is initiated */
-  byte_t *user_data;    /* pointer to user defined data, e.g.,
-           pre-decode data or physical page address */
-  /* DATA should be pointer-aligned due to preceeding field */
-  /* NOTE: this is a variable-size tail array, this must be the LAST field
-     defined in this structure! */
-  byte_t data[32];   /* actual data block starts here, block size
-           should probably be a multiple of 8 */
-};
+struct cache_parameters
+{ md_addr_t address;  /*address of pointer to block structure*/
+  int size;   /*size of block structure*/
+  };
 
-struct cache_blk_t_5
-{
-  void *way_next; /* next block in the ordered way chain, used
-           to order blocks for replacement */
-  void *way_prev; /* previous block in the order way chain */
-  void *hash_next;/* next block in the hash bucket chain, only
-           used in highly-associative caches */
-  /* since hash table lists are typically small, there is no previous
-     pointer, deletion requires a trip through the hash table bucket list */
-  md_addr_t tag;    /* data block tag value */
-  md_addr_t start_addr;   /*data block start address*/
-  md_addr_t end_addr;     /*data block end address*/
-  unsigned int status;    /* block status, see CACHE_BLK_* defs above */
-  tick_t ready;   /* time when block will be accessible, field
-           is set when a miss fetch is initiated */
-  byte_t *user_data;    /* pointer to user defined data, e.g.,
-           pre-decode data or physical page address */
-  /* DATA should be pointer-aligned due to preceeding field */
-  /* NOTE: this is a variable-size tail array, this must be the LAST field
-     defined in this structure! */
-  byte_t data[40];   /* actual data block starts here, block size
-           should probably be a multiple of 8 */
-};
 
-struct cache_blk_t_6
-{
-  void *way_next; /* next block in the ordered way chain, used
-           to order blocks for replacement */
-  void *way_prev; /* previous block in the order way chain */
-  void *hash_next;/* next block in the hash bucket chain, only
-           used in highly-associative caches */
-  /* since hash table lists are typically small, there is no previous
-     pointer, deletion requires a trip through the hash table bucket list */
-  md_addr_t tag;    /* data block tag value */
-  md_addr_t start_addr;   /*data block start address*/
-  md_addr_t end_addr;     /*data block end address*/
-  unsigned int status;    /* block status, see CACHE_BLK_* defs above */
-  tick_t ready;   /* time when block will be accessible, field
-           is set when a miss fetch is initiated */
-  byte_t *user_data;    /* pointer to user defined data, e.g.,
-           pre-decode data or physical page address */
-  /* DATA should be pointer-aligned due to preceeding field */
-  /* NOTE: this is a variable-size tail array, this must be the LAST field
-     defined in this structure! */
-  byte_t data[48];   /* actual data block starts here, block size
-           should probably be a multiple of 8 */
-};
-
-struct cache_blk_t_7
-{
-  void *way_next; /* next block in the ordered way chain, used
-           to order blocks for replacement */
-  void *way_prev; /* previous block in the order way chain */
-  void *hash_next;/* next block in the hash bucket chain, only
-           used in highly-associative caches */
-  /* since hash table lists are typically small, there is no previous
-     pointer, deletion requires a trip through the hash table bucket list */
-  md_addr_t tag;    /* data block tag value */
-  md_addr_t start_addr;   /*data block start address*/
-  md_addr_t end_addr;     /*data block end address*/
-  unsigned int status;    /* block status, see CACHE_BLK_* defs above */
-  tick_t ready;   /* time when block will be accessible, field
-           is set when a miss fetch is initiated */
-  byte_t *user_data;    /* pointer to user defined data, e.g.,
-           pre-decode data or physical page address */
-  /* DATA should be pointer-aligned due to preceeding field */
-  /* NOTE: this is a variable-size tail array, this must be the LAST field
-     defined in this structure! */
-  byte_t data[56];   /* actual data block starts here, block size
-           should probably be a multiple of 8 */
-};
-
-struct cache_blk_t_8
-{
-  void *way_next; /* next block in the ordered way chain, used
-           to order blocks for replacement */
-  void *way_prev; /* previous block in the order way chain */
-  void *hash_next;/* next block in the hash bucket chain, only
-           used in highly-associative caches */
-  /* since hash table lists are typically small, there is no previous
-     pointer, deletion requires a trip through the hash table bucket list */
-  md_addr_t tag;    /* data block tag value */
-  md_addr_t start_addr;   /*data block start address*/
-  md_addr_t end_addr;     /*data block end address*/
-  unsigned int status;    /* block status, see CACHE_BLK_* defs above */
-  tick_t ready;   /* time when block will be accessible, field
-           is set when a miss fetch is initiated */
-  byte_t *user_data;    /* pointer to user defined data, e.g.,
-           pre-decode data or physical page address */
-  /* DATA should be pointer-aligned due to preceeding field */
-  /* NOTE: this is a variable-size tail array, this must be the LAST field
-     defined in this structure! */
-  byte_t data[64];   /* actual data block starts here, block size
-           should probably be a multiple of 8 */
+struct cache_blocks
+{struct cache_parameters block[8192];
 };
 
 /* cache set definition (one or more blocks sharing the same set index) */

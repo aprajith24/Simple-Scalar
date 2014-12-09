@@ -257,6 +257,9 @@ update_way_list(struct cache_set_t *set,	/* set contained way chain */
     panic("bogus WHERE designator");
 }
 
+struct cache_blocks cache_blks;         /*declaration of 2d array for finding size of block from address*/ 
+struct prediction_table predict_table;  /*declaration of predictor table*/
+
 /* create and initialize a general cache structure */
 struct cache_t *			/* pointer to cache created */
 cache_create(char *name,		/* name of the cache */
@@ -492,6 +495,52 @@ cache_stats(struct cache_t *cp,		/* cache instance */
 	  (double)cp->invalidations/sum);
 }
 
+
+unsigned int 
+size_from_address(struct cache_blk_t *address)
+{ int i;
+  for(i=0; i<8192; i++){
+    if((int)address == cache_blks.block[i].address)
+      {int size;
+       size = cache_blks.block[i].size;
+       return size;
+      }
+  }
+  return 0;
+}
+
+unsigned int
+cache_filled()
+{int i;int size;
+  for(i=0; i<8192; i++)
+    {
+     size= size + cache_blks.block[i].size;
+    }
+    size=65536-size;
+return size;
+}
+
+void
+predictor_update(md_addr_t tag_address, md_addr_t offset)
+{
+  int i,j=0;
+  for(i=0; i<65536; i++){
+    if(predict_table.predictor[i].address==0 && predict_table.predictor[i].last_hit==0){
+      j=i;
+    }
+    if(tag_address==predict_table.predictor[i].address){
+      offset=offset/8;
+      predict_table.predictor[i].last_hit[offset]=1;
+      break;
+    }
+  }
+  if(i==65536){
+    predict_table.predictor[j].address = tag_address;
+    offset=offset/8;
+    predict_table.predictor[j].last_hit[offset]=1;
+  }
+}
+
 /* access a cache, perform a CMD operation on cache CP at address ADDR,
    places NBYTES of data at *P, returns latency of operation if initiated
    at NOW, places pointer to block user data in *UDATA, *P is untouched if
@@ -511,8 +560,11 @@ cache_access(struct cache_t *cp,	/* cache to access */
   md_addr_t tag = CACHE_TAG(cp, addr);
   md_addr_t set = CACHE_SET(cp, addr);
   md_addr_t bofs = CACHE_BLK(cp, addr);
-  struct cache_blk_t *blk, *repl;
+  struct cache_blk_t *blk;
+  struct cache_blk_t *repl;
   int lat = 0;
+  md_addr_t start_add;
+  md_addr_t end_add;
 
   /* default replacement address */
   if (repl_addr)
@@ -531,8 +583,8 @@ cache_access(struct cache_t *cp,	/* cache to access */
   /* permissions are checked on cache misses */
 
   /* check for a fast hit: access to same block */
-  if ((CACHE_TAGSET(cp, addr) == cp->last_tagset) && (blk->start_addr <= bofs) && (blk->end_addr >= bofs) )
-    {
+  if ((CACHE_TAGSET(cp, addr) == cp->last_tagset) && (cp->last_blk->start_addr <= bofs) && (cp->last_blk->end_addr >= bofs))
+    { 
       /* hit in the same block */
       blk = cp->last_blk;
       goto cache_fast_hit;
@@ -567,7 +619,49 @@ cache_access(struct cache_t *cp,	/* cache to access */
 
   /* **MISS** */
   cp->misses++;
+  int i,a,b,c,d=0;
+  for(i=0; i<65536; i++){
+    if(tag==predict_table.predictor[i].address){
+      for(a=bofs-8; a>=0; a=a-8){
+        c=a/8;
+        d=1;
+        if(predict_table.predictor[i].last_hit[c]==1){
+          start_add=c*8;
+        }
+        else{
+          start_add=(c+1)*8;
+        break;
+        }
+      }
+      if(d==0){
+        start_add=0;
+      }
 
+      d=0;
+
+      for(b=bofs+8; b<64; b=b+8){
+        c=b/8;
+        d=1;
+        if(predict_table.predictor[i].last_hit[c]==1){
+          end_add=((c+1)*8)-1;
+        }
+        else{
+          end_add=(c*8)-1;
+          break;
+        }
+      }
+      if(d==0){
+        end_add=63;
+      }
+      break;
+    }
+  }
+  if(i==65536){
+    start_add=0;
+    end_add=63;
+  }
+
+  
   /* select the appropriate block to replace, and re-link this entry to
      the appropriate place in the way list */
   switch (cp->policy) {
@@ -658,6 +752,7 @@ cache_access(struct cache_t *cp,	/* cache to access */
   
   /* **HIT** */
   cp->hits++;
+  predictor_update(tag,bofs);  /*Update predictor table on a hit*/
 
   /* copy data out of cache block, if block exists */
   if (cp->balloc)
@@ -693,6 +788,8 @@ cache_access(struct cache_t *cp,	/* cache to access */
   
   /* **FAST HIT** */
   cp->hits++;
+
+  predictor_update(tag,bofs);  /*Update predictor table on a hit*/
 
   /* copy data out of cache block, if block exists */
   if (cp->balloc)

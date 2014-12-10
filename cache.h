@@ -134,7 +134,6 @@ struct cache_blk_t
 				   should probably be a multiple of 8 */
 };
 
-
 struct predictor_parameters
 {md_addr_t address;   /*address of block accessed*/
  int last_hit[8];    /*history of access per 8 bytes of data*/
@@ -143,7 +142,6 @@ struct predictor_parameters
 struct prediction_table
 {struct predictor_parameters predictor[65535];
 };
-
 
 struct cache_parameters
 { md_addr_t address;  /*address of pointer to block structure*/
@@ -154,6 +152,10 @@ struct cache_parameters
 struct cache_blocks
 {struct cache_parameters block[8192];
 };
+
+struct cache_blocks cache_blks;         /*declaration of 2d array for finding size of block from address*/ 
+struct prediction_table predict_table;  /*declaration of predictor table*/
+
 
 /* cache set definition (one or more blocks sharing the same set index) */
 struct cache_set_t
@@ -248,7 +250,8 @@ cache_create(char *name,		/* name of the cache */
 					   md_addr_t baddr, int bsize,
 					   struct cache_blk_t *blk,
 					   tick_t now),
-	     unsigned int hit_latency);/* latency in cycles for a hit */
+	     unsigned int hit_latency, /* latency in cycles for a hit */
+       int dl1_flag);
 
 /* parse policy */
 enum cache_policy			/* replacement policy enum */
@@ -285,7 +288,8 @@ cache_access(struct cache_t *cp,	/* cache to access */
 	     int nbytes,		/* number of bytes to access */
 	     tick_t now,		/* time of access */
 	     byte_t **udata,		/* for return of user data ptr */
-	     md_addr_t *repl_addr);	/* for address of replaced block */
+	     md_addr_t *repl_addr,	/* for address of replaced block */
+       int dl1_flag);
 
 /* cache access functions, these are safe, they check alignment and
    permissions */

@@ -144,7 +144,7 @@ struct prediction_table
 };
 
 struct cache_parameters
-{ md_addr_t address;  /*address of pointer to block structure*/
+{ struct cache_blk_t *address;  /*address of pointer to block structure*/
   int size;   /*size of block structure*/
   };
 

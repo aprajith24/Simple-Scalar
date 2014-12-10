@@ -144,7 +144,7 @@
 size_from_address(struct cache_blk_t *address)
 { int i;
   for(i=0; i<8192; i++){
-    if((int)address == cache_blks.block[i].address)
+    if(address == cache_blks.block[i].address)
       {int size;
        size = cache_blks.block[i].size;
        return size;
@@ -154,12 +154,13 @@ size_from_address(struct cache_blk_t *address)
 }
 
 void 
-update_cache_blocks(struct cache_blk_t *address,md_addr_t size)
+update_cache_blocks(struct cache_blk_t *address,int size)
 {int i;
   for(i=0;i<8192;i++){
-    if(cache_blks.block[i].address==0 && cache_blks.block[i].size==0){
-      cache_blks.block[i].address=(long int)address;
-      cache_blks.block[i].size=(int)size;
+    if(cache_blks.block[i].address==NULL && cache_blks.block[i].size==0){
+      cache_blks.block[i].address=address;
+      cache_blks.block[i].size=size;
+      break;
     }
   }
 }
@@ -168,17 +169,17 @@ void
 remove_cache_blocks(struct cache_blk_t *address)
 {int i;
   for(i=0;i<8192;i++){
-    if(cache_blks.block[i].address==(long int)address){
-      cache_blks.block[i].address=0;
+    if(cache_blks.block[i].address==address){
+      cache_blks.block[i].address=NULL;
       cache_blks.block[i].size=0;
       break;
     }
   }
 }
 
-unsigned int
+int
 cache_free()
-{int i;int size;
+{int i;int size=0;
   for(i=0; i<8192; i++)
     {
      size= size + cache_blks.block[i].size;
@@ -192,7 +193,14 @@ predictor_update(md_addr_t tag_address, md_addr_t offset)
 {
   int i,j=0;
   for(i=0; i<65536; i++){
-    if(predict_table.predictor[i].address==0 && predict_table.predictor[i].last_hit==0){
+    if(predict_table.predictor[i].address==0 && predict_table.predictor[i].last_hit[0]==0 
+      && predict_table.predictor[i].last_hit[1]==0 
+      && predict_table.predictor[i].last_hit[2]==0 
+      && predict_table.predictor[i].last_hit[3]==0 
+      && predict_table.predictor[i].last_hit[4]==0 
+      && predict_table.predictor[i].last_hit[5]==0 
+      && predict_table.predictor[i].last_hit[6]==0 
+      && predict_table.predictor[i].last_hit[7]==0){
       j=i;
     }
     if(tag_address==predict_table.predictor[i].address){
@@ -226,7 +234,7 @@ unlink_htab_ent(struct cache_t *cp,		/* cache to update */
       if (ent == blk)
 	break;
     }
-  assert(ent);
+assert(ent);
 
   /* unlink the block from the hash table bucket chain */
   if (!prev)
@@ -327,14 +335,17 @@ update_way_list(struct cache_set_t *set,	/* set contained way chain */
     panic("bogus WHERE designator");
 }
 
-void
+static void
 remove_tail(struct cache_set_t *set,  /* set contained way chain */
     struct cache_blk_t *blk  /* block to remove */
 )
 {
+
   set->way_tail = blk->way_prev;
   (blk->way_prev)->way_next = NULL;
+
 }
+
 
 
 
@@ -440,7 +451,7 @@ cache_create(char *name,		/* name of the cache */
     int k,l;
 
 for(k=0; k<8192; k++){
-  cache_blks.block[k].address=0;
+  cache_blks.block[k].address=NULL;
   cache_blks.block[k].size=0;
 }
 
@@ -476,7 +487,7 @@ for(k=0; k<65536; k++){
          chains, if hash table exists */
   if(dl1_flag==1)
   {
-      for (j=0; j<assoc*64; j++)
+      for (j=0; j<assoc*8; j++)
 	{
 	  /* locate next cache block */
 	  blk = CACHE_BINDEX(cp, cp->data, bindex);
@@ -492,8 +503,8 @@ for(k=0; k<65536; k++){
 			    ? (byte_t *)calloc(usize, sizeof(byte_t)) : NULL);
 
 	  /* insert cache block into set hash table */
-	  if (cp->hsize)
-	    link_htab_ent(cp, &cp->sets[i], blk);
+	//  if (cp->hsize)
+	//    link_htab_ent(cp, &cp->sets[i], blk);
 
     update_cache_blocks(blk, 8);
 
@@ -505,7 +516,8 @@ for(k=0; k<65536; k++){
 	  cp->sets[i].way_head = blk;
 	  if (!cp->sets[i].way_tail)
 	    cp->sets[i].way_tail = blk;
-	}
+
+  }
   }
 
   else{
@@ -523,7 +535,7 @@ for(k=0; k<65536; k++){
           ? (byte_t *)calloc(usize, sizeof(byte_t)) : NULL);
 
     /* insert cache block into set hash table */
-    if (cp->hsize)
+   if (cp->hsize)
       link_htab_ent(cp, &cp->sets[i], blk);
 
     /* insert into head of way list, order is arbitrary at this point */
@@ -658,8 +670,8 @@ cache_access(struct cache_t *cp,	/* cache to access */
   struct cache_blk_t *blk;
   struct cache_blk_t *repl;
   int lat = 0;
-  md_addr_t start_add;
-  md_addr_t end_add;
+  md_addr_t start_add=0;
+  md_addr_t end_add=0;
 
   /* default replacement address */
   if (repl_addr)
@@ -685,30 +697,30 @@ cache_access(struct cache_t *cp,	/* cache to access */
       goto cache_fast_hit1;
     }
     
-  if (cp->hsize)
-    {
+//  if (cp->hsize)
+//    {
       /* higly-associativity cache, access through the per-set hash tables */
-      int hindex = CACHE_HASH(cp, tag);
+//      int hindex = CACHE_HASH(cp, tag);
 
-      for (blk=cp->sets[set].hash[hindex];
-	   blk;
-	   blk=blk->hash_next)
-	{
-	  if (blk->tag == tag && (blk->start_addr <= bofs) && (blk->end_addr >= bofs) &&(blk->status & CACHE_BLK_VALID))
-	    goto cache_hit1;
-	}
-    }
-  else
-    {
+//      for (blk=cp->sets[set].hash[hindex];
+//	   blk;
+//	   blk=blk->hash_next)
+//	{
+//	  if (blk->tag == tag && (blk->start_addr <= bofs) && (blk->end_addr >= bofs) &&(blk->status & CACHE_BLK_VALID))
+//	    goto cache_hit1;
+//	}
+//    }
+//  else
+//    {
       /* low-associativity cache, linear search the way list */
       for (blk=cp->sets[set].way_head;
 	   blk;
 	   blk=blk->way_next)
 	{
 	  if (blk->tag == tag && (blk->start_addr <= bofs) && (blk->end_addr >= bofs) &&(blk->status & CACHE_BLK_VALID))
-	    goto cache_hit;
+	    goto cache_hit1;
 	}
-    }
+//    }
 
   /* cache block not found */
 
@@ -716,6 +728,7 @@ cache_access(struct cache_t *cp,	/* cache to access */
   cp->misses++;
   int i,a,b,c,d=0;
   for(i=0; i<65536; i++){
+
     if(tag==predict_table.predictor[i].address){
       for(a=bofs-8; a>=0; a=a-8){
         c=a/8;
@@ -755,22 +768,23 @@ cache_access(struct cache_t *cp,	/* cache to access */
     start_add=0;
     end_add=63;
   }
-
   
   /* select the appropriate block to replace, and re-link this entry to
      the appropriate place in the way list */
   switch (cp->policy) {
   case LRU:
   case FIFO:
-    {int p=0;
+    {int p=0,q=0;
+      q=cache_free();
       block_remove:        
       p=p+size_from_address(cp->sets[set].way_tail);
       repl= cp->sets[set].way_tail;
-      if(p+cache_free()<(end_add-start_add)+1){
+ if(p+q<(end_add-start_add)+1){
+
         remove_tail(&cp->sets[set], repl);
-        if (cp->hsize){
-          unlink_htab_ent(cp, &cp->sets[set], repl);
-        }
+ //       if (cp->hsize){
+ //         unlink_htab_ent(cp, &cp->sets[set], repl);
+ //       }
         remove_cache_blocks(repl);
         goto block_remove;
       }
@@ -790,8 +804,8 @@ cache_access(struct cache_t *cp,	/* cache to access */
   }
 
   /* remove this block from the hash bucket chain, if hash exists */
-  if (cp->hsize)
-    unlink_htab_ent(cp, &cp->sets[set], repl);
+//  if (cp->hsize)
+//    unlink_htab_ent(cp, &cp->sets[set], repl);
 
   remove_cache_blocks(repl);
 
@@ -834,6 +848,8 @@ cache_access(struct cache_t *cp,	/* cache to access */
 
   update_cache_blocks(repl,(end_add-start_add)+1);
 
+  fprintf(stderr, "Fetched Tag - %llu, start_add - %llu, end_add - %llu\n",cp->sets[set].way_head->tag, cp->sets[set].way_head->start_addr, cp->sets[set].way_head->end_addr  );
+
 /*Clearing the values of the new cache block from predictor table*/
   int j;
 for(i=0; i<65536; i++){
@@ -868,8 +884,8 @@ for(i=0; i<65536; i++){
   repl->ready = now+lat;
 
   /* link this entry back into the hash table */
-  if (cp->hsize)
-    link_htab_ent(cp, &cp->sets[set], repl);
+//  if (cp->hsize)
+//    link_htab_ent(cp, &cp->sets[set], repl);
 
   /* return latency of the operation */
   return lat;

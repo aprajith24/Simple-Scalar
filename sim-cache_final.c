@@ -132,7 +132,7 @@ dl1_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
     {
       /* access next level of data cache hierarchy */
       return cache_access(cache_dl2, cmd, baddr, NULL, bsize,
-			  /* now */now, /* pudata */NULL, /* repl addr */NULL);
+			  /* now */now, /* pudata */NULL, /* repl addr */NULL,0);
     }
   else
     {
@@ -166,7 +166,7 @@ il1_access_fn(enum mem_cmd cmd,		/* access cmd, Read or Write */
     {
       /* access next level of inst cache hierarchy */
       return cache_access(cache_il2, cmd, baddr, NULL, bsize,
-			  /* now */now, /* pudata */NULL, /* repl addr */NULL);
+			  /* now */now, /* pudata */NULL, /* repl addr */NULL,0);
     }
   else
     {
@@ -352,7 +352,7 @@ sim_check_options(struct opt_odb_t *odb,	/* options database */
 	fatal("bad l1 D-cache parms: <name>:<nsets>:<bsize>:<assoc>:<repl>");
       cache_dl1 = cache_create(name, nsets, bsize, /* balloc */FALSE,
 			       /* usize */0, assoc, cache_char2policy(c),
-			       dl1_access_fn, /* hit latency */1);
+			       dl1_access_fn, /* hit latency */1,1);
 
       /* is the level 2 D-cache defined? */
       if (!mystricmp(cache_dl2_opt, "none"))
@@ -365,7 +365,7 @@ sim_check_options(struct opt_odb_t *odb,	/* options database */
 		  "<name>:<nsets>:<bsize>:<assoc>:<repl>");
 	  cache_dl2 = cache_create(name, nsets, bsize, /* balloc */FALSE,
 				   /* usize */0, assoc, cache_char2policy(c),
-				   dl2_access_fn, /* hit latency */1);
+				   dl2_access_fn, /* hit latency */1,0);
 	}
     }
 
@@ -408,7 +408,7 @@ sim_check_options(struct opt_odb_t *odb,	/* options database */
 	fatal("bad l1 I-cache parms: <name>:<nsets>:<bsize>:<assoc>:<repl>");
       cache_il1 = cache_create(name, nsets, bsize, /* balloc */FALSE,
 			       /* usize */0, assoc, cache_char2policy(c),
-			       il1_access_fn, /* hit latency */1);
+			       il1_access_fn, /* hit latency */1,0);
 
       /* is the level 2 D-cache defined? */
       if (!mystricmp(cache_il2_opt, "none"))
@@ -427,7 +427,7 @@ sim_check_options(struct opt_odb_t *odb,	/* options database */
 		  "<name>:<nsets>:<bsize>:<assoc>:<repl>");
 	  cache_il2 = cache_create(name, nsets, bsize, /* balloc */FALSE,
 				   /* usize */0, assoc, cache_char2policy(c),
-				   il2_access_fn, /* hit latency */1);
+				   il2_access_fn, /* hit latency */1,0);
 	}
     }
 
@@ -442,7 +442,7 @@ sim_check_options(struct opt_odb_t *odb,	/* options database */
       itlb = cache_create(name, nsets, bsize, /* balloc */FALSE,
 			  /* usize */sizeof(md_addr_t), assoc,
 			  cache_char2policy(c), itlb_access_fn,
-			  /* hit latency */1);
+			  /* hit latency */1,0);
     }
 
   /* use a D-TLB? */
@@ -456,7 +456,7 @@ sim_check_options(struct opt_odb_t *odb,	/* options database */
       dtlb = cache_create(name, nsets, bsize, /* balloc */FALSE,
 			  /* usize */sizeof(md_addr_t), assoc,
 			  cache_char2policy(c), dtlb_access_fn,
-			  /* hit latency */1);
+			  /* hit latency */1,0);
     }
 }
 
@@ -650,11 +650,11 @@ sim_uninit(void)
 #define __READ_CACHE(addr, SRC_T)					\
   ((dtlb								\
     ? cache_access(dtlb, Read, (addr), NULL,				\
-		   sizeof(SRC_T), 0, NULL, NULL)			\
+		   sizeof(SRC_T), 0, NULL, NULL,0)			\
     : 0),								\
    (cache_dl1								\
     ? cache_access(cache_dl1, Read, (addr), NULL,			\
-		   sizeof(SRC_T), 0, NULL, NULL)			\
+		   sizeof(SRC_T), 0, NULL, NULL,1)			\
     : 0))
 
 #define READ_BYTE(SRC, FAULT)						\
@@ -675,11 +675,11 @@ sim_uninit(void)
 #define __WRITE_CACHE(addr, DST_T)					\
   ((dtlb								\
     ? cache_access(dtlb, Write, (addr), NULL,				\
-		   sizeof(DST_T), 0, NULL, NULL)			\
+		   sizeof(DST_T), 0, NULL, NULL,0)			\
     : 0),								\
    (cache_dl1								\
     ? cache_access(cache_dl1, Write, (addr), NULL,			\
-		   sizeof(DST_T), 0, NULL, NULL)			\
+		   sizeof(DST_T), 0, NULL, NULL,1)			\
     : 0))
 
 #define WRITE_BYTE(SRC, DST, FAULT)					\
@@ -706,9 +706,9 @@ dcache_access_fn(struct mem_t *mem,	/* memory space to access */
 		 int nbytes)		/* number of bytes to access */
 {
   if (dtlb)
-    cache_access(dtlb, cmd, addr, NULL, nbytes, 0, NULL, NULL);
+    cache_access(dtlb, cmd, addr, NULL, nbytes, 0, NULL, NULL,0);
   if (cache_dl1)
-    cache_access(cache_dl1, cmd, addr, NULL, nbytes, 0, NULL, NULL);
+    cache_access(cache_dl1, cmd, addr, NULL, nbytes, 0, NULL, NULL,1);
   return mem_access(mem, cmd, addr, p, nbytes);
 }
 
@@ -753,10 +753,10 @@ sim_main(void)
       /* get the next instruction to execute */
       if (itlb)
 	cache_access(itlb, Read, IACOMPRESS(regs.regs_PC),
-		     NULL, ISCOMPRESS(sizeof(md_inst_t)), 0, NULL, NULL);
+		     NULL, ISCOMPRESS(sizeof(md_inst_t)), 0, NULL, NULL,0);
       if (cache_il1)
 	cache_access(cache_il1, Read, IACOMPRESS(regs.regs_PC),
-		     NULL, ISCOMPRESS(sizeof(md_inst_t)), 0, NULL, NULL);
+		     NULL, ISCOMPRESS(sizeof(md_inst_t)), 0, NULL, NULL,0);
       MD_FETCH_INST(inst, mem, regs.regs_PC);
 
       /* keep an instruction count */

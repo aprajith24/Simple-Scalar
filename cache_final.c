@@ -139,6 +139,84 @@
 /* bound sqword_t/dfloat_t to positive int */
 #define BOUND_POS(N)		((int)(MIN(MAX(0, (N)), 2147483647)))
 
+
+  unsigned int 
+size_from_address(struct cache_blk_t *address)
+{ int i;
+  for(i=0; i<8192; i++){
+    if(address == cache_blks.block[i].address)
+      {int size;
+       size = cache_blks.block[i].size;
+       return size;
+      }
+  }
+  return 0;
+}
+
+void 
+update_cache_blocks(struct cache_blk_t *address,int size)
+{int i;
+  for(i=0;i<8192;i++){
+    if(cache_blks.block[i].address==NULL && cache_blks.block[i].size==0){
+      cache_blks.block[i].address=address;
+      cache_blks.block[i].size=size;
+      break;
+    }
+  }
+}
+
+void 
+remove_cache_blocks(struct cache_blk_t *address)
+{int i;
+  for(i=0;i<8192;i++){
+    if(cache_blks.block[i].address==address){
+      cache_blks.block[i].address=NULL;
+      cache_blks.block[i].size=0;
+      break;
+    }
+  }
+}
+
+int
+cache_free()
+{int i;int size=0;
+  for(i=0; i<8192; i++)
+    {
+     size= size + cache_blks.block[i].size;
+    }
+    size=65536-size;
+return size;
+}
+
+void
+predictor_update(md_addr_t tag_address, md_addr_t offset)
+{
+  int i,j=0;
+  for(i=0; i<10000; i++){
+    if(predict_table.predictor[i].address==0 && predict_table.predictor[i].last_hit[0]==0 
+      && predict_table.predictor[i].last_hit[1]==0 
+      && predict_table.predictor[i].last_hit[2]==0 
+      && predict_table.predictor[i].last_hit[3]==0 
+      && predict_table.predictor[i].last_hit[4]==0 
+      && predict_table.predictor[i].last_hit[5]==0 
+      && predict_table.predictor[i].last_hit[6]==0 
+      && predict_table.predictor[i].last_hit[7]==0){
+      j=i;
+    }
+    if(tag_address==predict_table.predictor[i].address){
+      offset=offset/8;
+      predict_table.predictor[i].last_hit[offset]=1;
+      break;
+    }
+  }
+  if(i==10000){
+    predict_table.predictor[j].address = tag_address;
+    offset=offset/8;
+    predict_table.predictor[j].last_hit[offset]=1;
+  }
+}
+
+
 /* unlink BLK from the hash table bucket chain in SET */
 static void
 unlink_htab_ent(struct cache_t *cp,		/* cache to update */
@@ -156,7 +234,7 @@ unlink_htab_ent(struct cache_t *cp,		/* cache to update */
       if (ent == blk)
 	break;
     }
-  assert(ent);
+assert(ent);
 
   /* unlink the block from the hash table bucket chain */
   if (!prev)
@@ -177,7 +255,7 @@ static void
 link_htab_ent(struct cache_t *cp,		/* cache to update */
 	      struct cache_set_t *set,		/* set containing bkt chain */
 	      struct cache_blk_t *blk)		/* block to insert */
-{
+{ 
   int index = CACHE_HASH(cp, blk->tag);
 
   /* insert block onto the head of the bucket chain */
@@ -193,7 +271,8 @@ static void
 update_way_list(struct cache_set_t *set,	/* set contained way chain */
 		struct cache_blk_t *blk,	/* block to insert */
 		enum list_loc_t where)		/* insert location */
-{
+{ 
+  
   /* unlink entry from the way list */
   if (!blk->way_prev && !blk->way_next)
     {
@@ -211,9 +290,9 @@ update_way_list(struct cache_set_t *set,	/* set contained way chain */
 	  /* already there */
 	  return;
 	}
-      /* else, move to tail */
+     /* else, move to tail */
       set->way_head = blk->way_next;
-      blk->way_next->way_prev = NULL;
+      (blk->way_next)->way_prev = NULL;
     }
   else if (!blk->way_next)
     {
@@ -225,14 +304,14 @@ update_way_list(struct cache_set_t *set,	/* set contained way chain */
 	  return;
 	}
       set->way_tail = blk->way_prev;
-      blk->way_prev->way_next = NULL;
+      (blk->way_prev)->way_next = NULL;
     }
   else
     {
       /* middle of list (and not front or end of list) */
       assert(set->way_head != blk && set->way_tail != blk);
-      blk->way_prev->way_next = blk->way_next;
-      blk->way_next->way_prev = blk->way_prev;
+      (blk->way_prev)->way_next = blk->way_next;
+      (blk->way_next)->way_prev = blk->way_prev;
     }
 
   /* link BLK back into the list */
@@ -256,6 +335,20 @@ update_way_list(struct cache_set_t *set,	/* set contained way chain */
     panic("bogus WHERE designator");
 }
 
+static void
+remove_tail(struct cache_set_t *set,  /* set contained way chain */
+    struct cache_blk_t *blk  /* block to remove */
+)
+{
+
+  set->way_tail = blk->way_prev;
+  (blk->way_prev)->way_next = NULL;
+
+}
+
+
+
+
 /* create and initialize a general cache structure */
 struct cache_t *			/* pointer to cache created */
 cache_create(char *name,		/* name of the cache */
@@ -270,7 +363,8 @@ cache_create(char *name,		/* name of the cache */
 					   md_addr_t baddr, int bsize,
 					   struct cache_blk_t *blk,
 					   tick_t now),
-	     unsigned int hit_latency)	/* latency in cycles for a hit */
+	     unsigned int hit_latency,	/* latency in cycles for a hit */
+       int dl1_flag)      /* checking if dl1 caache is being created*/
 {
   struct cache_t *cp;
   struct cache_blk_t *blk;
@@ -324,6 +418,7 @@ cache_create(char *name,		/* name of the cache */
   cp->tagset_mask = ~cp->blk_mask;
   cp->bus_free = 0;
 
+
   /* print derived parameters during debug */
   debug("%s: cp->hsize     = %d", cp->name, cp->hsize);
   debug("%s: cp->blk_mask  = 0x%08x", cp->name, cp->blk_mask);
@@ -344,11 +439,30 @@ cache_create(char *name,		/* name of the cache */
   cp->last_blk = NULL;
 
   /* allocate data blocks */
-  cp->data = (byte_t *)calloc(nsets * assoc,
+  cp->data = (byte_t *)calloc(nsets * assoc * 64,
 			      sizeof(struct cache_blk_t) +
 			      (cp->balloc ? (bsize*sizeof(byte_t)) : 0));
   if (!cp->data)
     fatal("out of virtual memory");
+
+ /*initializing cache and predictor tables*/
+  if(dl1_flag==1)
+  {
+    int k,l;
+
+for(k=0; k<8192; k++){
+  cache_blks.block[k].address=NULL;
+  cache_blks.block[k].size=0;
+}
+
+for(k=0; k<10000; k++){
+  predict_table.predictor[k].address=0;
+  for(l=0; l<8; l++){
+    predict_table.predictor[k].last_hit[l]=0;
+  }
+}
+
+  }
 
   /* slice up the data blocks */
   for (bindex=0,i=0; i<nsets; i++)
@@ -371,7 +485,9 @@ cache_create(char *name,		/* name of the cache */
       
       /* link the data blocks into ordered way chain and hash table bucket
          chains, if hash table exists */
-      for (j=0; j<assoc; j++)
+  if(dl1_flag==1)
+  {
+      for (j=0; j<assoc*8; j++)
 	{
 	  /* locate next cache block */
 	  blk = CACHE_BINDEX(cp, cp->data, bindex);
@@ -381,12 +497,16 @@ cache_create(char *name,		/* name of the cache */
 	  blk->status = 0;
 	  blk->tag = 0;
 	  blk->ready = 0;
+    blk->start_addr=0;
+    blk->end_addr=0;
 	  blk->user_data = (usize != 0
 			    ? (byte_t *)calloc(usize, sizeof(byte_t)) : NULL);
 
 	  /* insert cache block into set hash table */
-	  if (cp->hsize)
-	    link_htab_ent(cp, &cp->sets[i], blk);
+	//  if (cp->hsize)
+	//    link_htab_ent(cp, &cp->sets[i], blk);
+
+    update_cache_blocks(blk, 8);
 
 	  /* insert into head of way list, order is arbitrary at this point */
 	  blk->way_next = cp->sets[i].way_head;
@@ -396,8 +516,41 @@ cache_create(char *name,		/* name of the cache */
 	  cp->sets[i].way_head = blk;
 	  if (!cp->sets[i].way_tail)
 	    cp->sets[i].way_tail = blk;
-	}
-    }
+
+  }
+  }
+
+  else{
+        for (j=0; j<assoc; j++)
+  {
+    /* locate next cache block */
+    blk = CACHE_BINDEX(cp, cp->data, bindex);
+    bindex++;
+
+    /* invalidate new cache block */
+    blk->status = 0;
+    blk->tag = 0;
+    blk->ready = 0;
+    blk->user_data = (usize != 0
+          ? (byte_t *)calloc(usize, sizeof(byte_t)) : NULL);
+
+    /* insert cache block into set hash table */
+   if (cp->hsize)
+      link_htab_ent(cp, &cp->sets[i], blk);
+
+    /* insert into head of way list, order is arbitrary at this point */
+    blk->way_next = cp->sets[i].way_head;
+    blk->way_prev = NULL;
+    if (cp->sets[i].way_head)
+      cp->sets[i].way_head->way_prev = blk;
+    cp->sets[i].way_head = blk;
+    if (!cp->sets[i].way_tail)
+      cp->sets[i].way_tail = blk;
+  }
+
+  }
+
+  }
   return cp;
 }
 
@@ -491,6 +644,8 @@ cache_stats(struct cache_t *cp,		/* cache instance */
 	  (double)cp->invalidations/sum);
 }
 
+
+
 /* access a cache, perform a CMD operation on cache CP at address ADDR,
    places NBYTES of data at *P, returns latency of operation if initiated
    at NOW, places pointer to block user data in *UDATA, *P is untouched if
@@ -504,8 +659,307 @@ cache_access(struct cache_t *cp,	/* cache to access */
 	     int nbytes,		/* number of bytes to access */
 	     tick_t now,		/* time of access */
 	     byte_t **udata,		/* for return of user data ptr */
-	     md_addr_t *repl_addr)	/* for address of replaced block */
-{
+	     md_addr_t *repl_addr,	/* for address of replaced block */
+       int dl1_flag)    /*checking if cache access is for dl1*/
+{ if(dl1_flag==1)
+  {
+  byte_t *p = vp;
+  md_addr_t tag = CACHE_TAG(cp, addr);
+  md_addr_t set = CACHE_SET(cp, addr);
+  md_addr_t bofs = CACHE_BLK(cp, addr);
+  struct cache_blk_t *blk;
+  struct cache_blk_t *repl;
+  int lat = 0;
+  md_addr_t start_add=0;
+  md_addr_t end_add=0;
+
+  /* default replacement address */
+  if (repl_addr)
+    *repl_addr = 0;
+
+  /* check alignments */
+  if ((nbytes & (nbytes-1)) != 0 || (addr & (nbytes-1)) != 0)
+    fatal("cache: access error: bad size or alignment, addr 0x%08x", addr);
+
+  /* access must fit in cache block */
+  /* FIXME:
+     ((addr + (nbytes - 1)) > ((addr & ~cp->blk_mask) + (cp->bsize - 1))) */
+  if ((addr + nbytes) > ((addr & ~cp->blk_mask) + cp->bsize))
+    fatal("cache: access error: access spans block, addr 0x%08x", addr);
+
+  /* permissions are checked on cache misses */
+
+  /* check for a fast hit: access to same block */
+  if ((CACHE_TAGSET(cp, addr) == cp->last_tagset) && (cp->last_blk->start_addr <= bofs) && (cp->last_blk->end_addr >= bofs))
+    { 
+      /* hit in the same block */
+      blk = cp->last_blk;
+      goto cache_fast_hit1;
+    }
+    
+//  if (cp->hsize)
+//    {
+      /* higly-associativity cache, access through the per-set hash tables */
+//      int hindex = CACHE_HASH(cp, tag);
+
+//      for (blk=cp->sets[set].hash[hindex];
+//	   blk;
+//	   blk=blk->hash_next)
+//	{
+//	  if (blk->tag == tag && (blk->start_addr <= bofs) && (blk->end_addr >= bofs) &&(blk->status & CACHE_BLK_VALID))
+//	    goto cache_hit1;
+//	}
+//    }
+//  else
+//    {
+      /* low-associativity cache, linear search the way list */
+      for (blk=cp->sets[set].way_head;
+	   blk;
+	   blk=blk->way_next)
+	{
+	  if (blk->tag == tag && (blk->start_addr <= bofs) && (blk->end_addr >= bofs) &&(blk->status & CACHE_BLK_VALID))
+	    goto cache_hit1;
+	}
+//    }
+
+  /* cache block not found */
+
+  /* **MISS** */
+  cp->misses++;
+  int i,a,b,c,d=0;
+  for(i=0; i<10000; i++){
+
+    if(tag==predict_table.predictor[i].address){
+      for(a=bofs-8; a>=0; a=a-8){
+        c=a/8;
+        d=1;
+        if(predict_table.predictor[i].last_hit[c]==1){
+          start_add=c*8;
+        }
+        else{
+          start_add=(c+1)*8;
+        break;
+        }
+      }
+      if(d==0){
+        start_add=0;
+      }
+
+      d=0;
+
+      for(b=bofs+8; b<64; b=b+8){
+        c=b/8;
+        d=1;
+        if(predict_table.predictor[i].last_hit[c]==1){
+          end_add=((c+1)*8)-1;
+        }
+        else{
+          end_add=(c*8)-1;
+          break;
+        }
+      }
+      if(d==0){
+        end_add=63;
+      }
+      break;
+    }
+  }
+  if(i==10000){
+    start_add=0;
+    end_add=63;
+  }
+  
+  /* select the appropriate block to replace, and re-link this entry to
+     the appropriate place in the way list */
+  switch (cp->policy) {
+  case LRU:
+  case FIFO:
+    {int p=0,q=0;
+      q=cache_free();
+      block_remove:        
+      p=p+size_from_address(cp->sets[set].way_tail);
+      repl= cp->sets[set].way_tail;
+ if(p+q<(end_add-start_add)+1){
+
+        remove_tail(&cp->sets[set], repl);
+ //       if (cp->hsize){
+ //         unlink_htab_ent(cp, &cp->sets[set], repl);
+ //       }
+        remove_cache_blocks(repl);
+        goto block_remove;
+      }
+      
+    update_way_list(&cp->sets[set], repl, Head);
+
+    break;
+    }
+  case Random:
+    {
+      int bindex = myrand() & (cp->assoc - 1);
+      repl = CACHE_BINDEX(cp, cp->sets[set].blks, bindex);
+    }
+    break;
+  default:
+    panic("bogus replacement policy");
+  }
+
+  /* remove this block from the hash bucket chain, if hash exists */
+//  if (cp->hsize)
+//    unlink_htab_ent(cp, &cp->sets[set], repl);
+
+  remove_cache_blocks(repl);
+
+  /* blow away the last block to hit */
+  cp->last_tagset = 0;
+  cp->last_blk = NULL;
+
+  /* write back replaced block data */
+  if (repl->status & CACHE_BLK_VALID)
+    {
+      cp->replacements++;
+
+      if (repl_addr)
+	*repl_addr = CACHE_MK_BADDR(cp, repl->tag, set);
+ 
+      /* don't replace the block until outstanding misses are satisfied */
+      lat += BOUND_POS(repl->ready - now);
+ 
+      /* stall until the bus to next level of memory is available */
+      lat += BOUND_POS(cp->bus_free - (now + lat));
+ 
+      /* track bus resource usage */
+      cp->bus_free = MAX(cp->bus_free, (now + lat)) + 1;
+
+      if (repl->status & CACHE_BLK_DIRTY)
+	{
+	  /* write back the cache block */
+	  cp->writebacks++;
+	  lat += cp->blk_access_fn(Write,
+				   CACHE_MK_BADDR(cp, repl->tag, set),
+				   cp->bsize, repl, now+lat);
+	}
+    }
+
+  /* update block tags */
+  repl->tag = tag;
+  repl->status = CACHE_BLK_VALID;	/* dirty bit set on update */
+  repl->start_addr=start_add;
+  repl->end_addr=end_add;
+
+  update_cache_blocks(repl,(end_add-start_add)+1);
+
+
+/*Clearing the values of the new cache block from predictor table*/
+  int j;
+for(i=0; i<10000; i++){
+    if(repl->tag==predict_table.predictor[i].address){
+      for(j=0;j<8;j++){
+        predict_table.predictor[i].last_hit[j]=0;
+      }
+      predict_table.predictor[i].address=0;
+      break;
+    }
+} 
+  
+  /* read data block */
+  lat += cp->blk_access_fn(Read, CACHE_BADDR(cp, addr), cp->bsize,
+			   repl, now+lat);
+
+  /* copy data out of cache block */
+  if (cp->balloc)
+    {
+      CACHE_BCOPY(cmd, repl, bofs, p, nbytes);
+    }
+
+  /* update dirty status */
+  if (cmd == Write)
+    repl->status |= CACHE_BLK_DIRTY;
+
+  /* get user block data, if requested and it exists */
+  if (udata)
+    *udata = repl->user_data;
+
+  /* update block status */
+  repl->ready = now+lat;
+
+  /* link this entry back into the hash table */
+//  if (cp->hsize)
+//    link_htab_ent(cp, &cp->sets[set], repl);
+
+  /* return latency of the operation */
+  return lat;
+
+
+ cache_hit1: /* slow hit handler */
+  
+  /* **HIT** */
+  cp->hits++;
+  predictor_update(tag,bofs);  /*Update predictor table on a hit*/
+
+  /* copy data out of cache block, if block exists */
+  if (cp->balloc)
+    {
+      CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
+    }
+
+  /* update dirty status */
+  if (cmd == Write)
+    blk->status |= CACHE_BLK_DIRTY;
+
+  /* if LRU replacement and this is not the first element of list, reorder */
+  if (blk->way_prev && cp->policy == LRU)
+    {
+      /* move this block to head of the way (MRU) list */
+      update_way_list(&cp->sets[set], blk, Head);
+    }
+
+  /* tag is unchanged, so hash links (if they exist) are still valid */
+
+  /* record the last block to hit */
+  cp->last_tagset = CACHE_TAGSET(cp, addr);
+  cp->last_blk = blk;
+
+  /* get user block data, if requested and it exists */
+  if (udata)
+    *udata = blk->user_data;
+
+  /* return first cycle data is available to access */
+  return (int) MAX(cp->hit_latency, (blk->ready - now));
+
+ cache_fast_hit1: /* fast hit handler */
+  
+  /* **FAST HIT** */
+  cp->hits++;
+
+  predictor_update(tag,bofs);  /*Update predictor table on a hit*/
+
+  /* copy data out of cache block, if block exists */
+  if (cp->balloc)
+    {
+      CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
+    }
+
+  /* update dirty status */
+  if (cmd == Write)
+    blk->status |= CACHE_BLK_DIRTY;
+
+  /* this block hit last, no change in the way list */
+
+  /* tag is unchanged, so hash links (if they exist) are still valid */
+
+  /* get user block data, if requested and it exists */
+  if (udata)
+    *udata = blk->user_data;
+
+  /* record the last block to hit */
+  cp->last_tagset = CACHE_TAGSET(cp, addr);
+  cp->last_blk = blk;
+
+  /* return first cycle data is available to access */
+  return (int) MAX(cp->hit_latency, (blk->ready - now));
+}
+
+else{
   byte_t *p = vp;
   md_addr_t tag = CACHE_TAG(cp, addr);
   md_addr_t set = CACHE_SET(cp, addr);
@@ -543,23 +997,23 @@ cache_access(struct cache_t *cp,	/* cache to access */
       int hindex = CACHE_HASH(cp, tag);
 
       for (blk=cp->sets[set].hash[hindex];
-	   blk;
-	   blk=blk->hash_next)
-	{
-	  if (blk->tag == tag && (blk->status & CACHE_BLK_VALID))
-	    goto cache_hit;
-	}
+     blk;
+     blk=blk->hash_next)
+  {
+    if (blk->tag == tag && (blk->status & CACHE_BLK_VALID))
+      goto cache_hit;
+  }
     }
   else
     {
       /* low-associativity cache, linear search the way list */
       for (blk=cp->sets[set].way_head;
-	   blk;
-	   blk=blk->way_next)
-	{
-	  if (blk->tag == tag && (blk->status & CACHE_BLK_VALID))
-	    goto cache_hit;
-	}
+     blk;
+     blk=blk->way_next)
+  {
+    if (blk->tag == tag && (blk->status & CACHE_BLK_VALID))
+      goto cache_hit;
+  }
     }
 
   /* cache block not found */
@@ -599,7 +1053,7 @@ cache_access(struct cache_t *cp,	/* cache to access */
       cp->replacements++;
 
       if (repl_addr)
-	*repl_addr = CACHE_MK_BADDR(cp, repl->tag, set);
+  *repl_addr = CACHE_MK_BADDR(cp, repl->tag, set);
  
       /* don't replace the block until outstanding misses are satisfied */
       lat += BOUND_POS(repl->ready - now);
@@ -611,22 +1065,22 @@ cache_access(struct cache_t *cp,	/* cache to access */
       cp->bus_free = MAX(cp->bus_free, (now + lat)) + 1;
 
       if (repl->status & CACHE_BLK_DIRTY)
-	{
-	  /* write back the cache block */
-	  cp->writebacks++;
-	  lat += cp->blk_access_fn(Write,
-				   CACHE_MK_BADDR(cp, repl->tag, set),
-				   cp->bsize, repl, now+lat);
-	}
+  {
+    /* write back the cache block */
+    cp->writebacks++;
+    lat += cp->blk_access_fn(Write,
+           CACHE_MK_BADDR(cp, repl->tag, set),
+           cp->bsize, repl, now+lat);
+  }
     }
 
   /* update block tags */
   repl->tag = tag;
-  repl->status = CACHE_BLK_VALID;	/* dirty bit set on update */
+  repl->status = CACHE_BLK_VALID; /* dirty bit set on update */
 
   /* read data block */
   lat += cp->blk_access_fn(Read, CACHE_BADDR(cp, addr), cp->bsize,
-			   repl, now+lat);
+         repl, now+lat);
 
   /* copy data out of cache block */
   if (cp->balloc)
@@ -717,6 +1171,7 @@ cache_access(struct cache_t *cp,	/* cache to access */
 
   /* return first cycle data is available to access */
   return (int) MAX(cp->hit_latency, (blk->ready - now));
+}
 }
 
 /* return non-zero if block containing address ADDR is contained in cache
